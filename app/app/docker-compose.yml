@@ -1,0 +1,37 @@
+version: "3.8"
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports: ["6379:6379"]
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: classicagent
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports: ["5432:5432"]
+  web:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/classicagent
+      - REDIS_URL=redis://redis:6379/0
+      - FERNET_KEY=${FERNET_KEY}
+    depends_on: ["redis","db"]
+    ports: ["8000:8000"]
+  worker:
+    build: .
+    command: dramatiq app.tasks --processes 2 --threads 8
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/classicagent
+      - REDIS_URL=redis://redis:6379/0
+      - FERNET_KEY=${FERNET_KEY}
+    depends_on: ["redis","db"]
+    deploy:
+      replicas: 2
+
+volumes:
+  db-data:
